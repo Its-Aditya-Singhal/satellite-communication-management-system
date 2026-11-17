@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Organisation · SCMS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">🏢</div>
+    <div><h1>Organisation portal</h1><p>Satellite Communication Management System</p></div>
+    <div class="right"><span class="chip" id="who"></span><button class="ghost" onclick="logout()">Logout</button></div>
+  </header>
+  <nav id="nav"></nav>
+  <main>
+    <div class="title"><div><h2 id="title"></h2><p id="sub"></p></div></div>
+    <div id="page"></div>
+  </main>
+  <div id="toast"></div>
+
+  <script src="app.js"></script>
+  <script>
+    guard('organisation');
+    const checks = (name, list, on = []) => '<div class="checks">' +
+      list.map((v) => `<label><input type="checkbox" name="${name}" value="${v}" ${on.includes(v) ? 'checked' : ''}>${v}</label>`).join('') + '</div>';
+
+    // submit a form to the API, then go to "My requests"
+    function sendForm(id, url, msg) {
+      document.getElementById(id).onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+          await api('POST', url, formData(e.target));
+          toast(msg, true);
+          show('requests');
+        } catch (err) { toast(err.message, false); }
+      };
+    }
+
+    tabs({
+      assets: {
+        title: 'My satellites & stations',
+        sub: 'Everything you registered and its approval status',
+        render: async () => {
+          const { satellites, stations } = await api('GET', '/api/org/assets');
+          return '<div class="card"><h3>Satellites</h3></div>' + table(satellites, [
+            ['sat_id', '#'], ['name', 'Name'], ['orbit_type', 'Orbit', (v) => badge(v)],
+            ['frequency_band', 'Band'], ['status', 'Status', (v) => badge(v)],
+          ], 'No satellites yet') + '<div class="card"><h3>Ground / launch stations</h3></div>' + table(stations, [
+            ['station_id', '#'], ['name', 'Name'], ['location', 'Location'], ['status', 'Status', (v) => badge(v)],
+          ], 'No stations yet');
+        },
+      },
+
+      satellite: {
+        title: 'Register satellite',
+        sub: 'Saved as pending in MySQL; technical details go to MongoDB; the admin gets a request',
+        render: async () => `<div class="card"><h3>Satellite details</h3>
+          <form class="f" id="satForm">
+            <label>Name <input name="name" required></label>
+            <label>Orbit <select name="orbit_type"><option>LEO</option><option>MEO</option><option>GEO</option></select></label>
+            <label>Frequency band <select name="frequency_band"><option>L</option><option>S</option><option>C</option><option>X</option><option>Ku</option><option>Ka</option></select></label>
+            <label>Launch date <input type="date" name="launch_date" required></label>
+            <label>Launch vehicle <input name="launch_vehicle" placeholder="e.g. PSLV-C47" required></label>
+            <label>Mass (kg) <input type="number" name="mass_kg" min="1" required></label>
+            <label class="wide">Purpose <input name="purpose" placeholder="e.g. Earth imaging" required></label>
+            <label class="wide">Available days ${checks('days', ALL_DAYS, ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'])}</label>
+            <label>Available from <input type="time" name="from_time" value="06:00" required></label>
+            <label>Available to <input type="time" name="to_time" value="18:00" required></label>
+            <div><button class="primary">Send for approval</button></div>
+          </form></div>`,
+        after: () => sendForm('satForm', '/api/org/satellites', 'Satellite sent to the admin for approval'),
+      },
+
+      station: {
+        title: 'Register station',
+        sub: 'Ground or launch station. Saved as pending until the admin approves it.',
+        render: async () => `<div class="card"><h3>Station details</h3>
+          <form class="f" id="stForm">
+            <label>Name <input name="name" required></label>
+            <label>Location (state / city) <input name="location" required></label>
+            <label>Latitude <input type="number" step="any" name="latitude" required></label>
+            <label>Longitude <input type="number" step="any" name="longitude" required></label>
+            <label>Antenna size (m) <input type="number" step="any" name="antenna_m" required></label>
+            <label class="wide">Supported bands ${checks('bands', ['L', 'S', 'C', 'X', 'Ku', 'Ka'])}</label>
+            <div><button class="primary">Send for approval</button></div>
+          </form></div>`,
+        after: () => sendForm('stForm', '/api/org/stations', 'Station sent to the admin for approval'),
+      },
+
+      requests: {
+        title: 'My requests',
+        sub: 'Each request is a MongoDB document with its full status history',
+        render: async () => {
+          const list = await api('GET', '/api/my/requests');
+          return list.length ? list.map((r) => requestCard(r)).join('') : '<div class="card"><div class="empty">No requests yet</div></div>';
+        },
+      },
+    });
+  </script>
+</body>
+</html>

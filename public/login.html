@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login · SCMS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">🛰</div>
+    <div><h1>Satellite Communication Management System</h1><p>MySQL + MongoDB · DBMS Mini Project</p></div>
+    <div class="right"><a class="ghost" href="index.html">← Home</a></div>
+  </header>
+
+  <div class="auth">
+    <div class="card">
+      <h2 id="heading"></h2>
+      <p class="muted" id="subheading"></p>
+      <div class="switch" id="switch">
+        <button id="s-login" onclick="mode('login')">Login</button>
+        <button id="s-register" onclick="mode('register')">Create account</button>
+      </div>
+
+      <form id="login" onsubmit="doLogin(event)">
+        <label>Email <input name="email" type="email" required></label>
+        <label>Password <input name="password" type="password" required></label>
+        <button class="primary">Login</button>
+      </form>
+
+      <form id="register" onsubmit="doRegister(event)" style="display:none">
+        <label><span id="nameLabel">Name</span> <input name="name" required></label>
+        <label>Email <input name="email" type="email" required></label>
+        <label>Password (min 6) <input name="password" type="password" minlength="6" required></label>
+        <div id="extra"></div>
+        <button class="primary">Create account</button>
+      </form>
+
+      <div class="hint" id="hint"></div>
+    </div>
+  </div>
+  <div id="toast"></div>
+
+  <script src="app.js"></script>
+  <script>
+    const role = new URLSearchParams(location.search).get('role') || 'client';
+    const NAMES = { client: 'Client', organisation: 'Organisation', admin: 'Admin' };
+    const DEMO = { client: 'client@scms.in / client123', organisation: 'isro@scms.in / org123', admin: 'admin@scms.in / admin123' };
+
+    // extra profile fields for each role (saved in MongoDB "profiles")
+    const EXTRA = {
+      organisation: `<div class="two">
+          <label>Organisation type <select name="org_type"><option>Government</option><option>Private</option><option>Research</option><option>University</option></select></label>
+          <label>Registration no. <input name="registration_no" required></label></div>
+        <div class="two">
+          <label>Country <input name="country" value="India" required></label>
+          <label>Phone <input name="phone"></label></div>
+        <label>Website <input name="website"></label>`,
+      client: `<div class="two">
+          <label>Company <input name="company"></label>
+          <label>Industry <select name="industry"><option>Telecom</option><option>Broadcasting</option><option>Agriculture</option><option>Defence</option><option>Research</option><option>Other</option></select></label></div>
+        <label>Phone <input name="phone"></label>`,
+    };
+
+    document.title = NAMES[role] + ' login · SCMS';
+    document.getElementById('heading').textContent = NAMES[role] + ' portal';
+    document.getElementById('subheading').textContent = role === 'admin'
+      ? 'Admin accounts cannot be created from here.'
+      : 'Login, or create a new ' + role + ' account.';
+    document.getElementById('hint').textContent = 'Demo account: ' + DEMO[role];
+    if (role === 'admin') document.getElementById('switch').style.display = 'none';
+    else {
+      document.getElementById('extra').innerHTML = EXTRA[role];
+      document.getElementById('nameLabel').textContent = role === 'organisation' ? 'Organisation name' : 'Your name';
+    }
+
+    // already logged in with this role? go straight to the dashboard
+    if (me() && me().role === role) location.href = HOME[role];
+
+    function mode(m) {
+      document.getElementById('login').style.display = m === 'login' ? '' : 'none';
+      document.getElementById('register').style.display = m === 'register' ? '' : 'none';
+      document.getElementById('s-login').classList.toggle('on', m === 'login');
+      document.getElementById('s-register').classList.toggle('on', m === 'register');
+    }
+    mode('login');
+
+    async function doLogin(e) {
+      e.preventDefault();
+      const f = formData(e.target);
+      try {
+        const r = await api('POST', '/api/login', { ...f, role });
+        sessionStorage.setItem('token', r.token);
+        sessionStorage.setItem('user', JSON.stringify(r.user));
+        location.href = HOME[role];
+      } catch (err) { toast(err.message, false); }
+    }
+
+    async function doRegister(e) {
+      e.preventDefault();
+      const { name, email, password, ...profile } = formData(e.target);
+      try {
+        await api('POST', '/api/register', { role, name, email, password, profile });
+        toast('Account created. Please login.', true);
+        mode('login');
+        document.querySelector('#login [name=email]').value = email;
+      } catch (err) { toast(err.message, false); }
+    }
+  </script>
+</body>
+</html>

@@ -1,6 +1,13 @@
 {
   "name": "scms",
-  "version": "1.0.0",
-  "scripts": { "start": "node server.js" },
-  "dependencies": { "express": "^5.1.0", "mysql2": "^3.11.0" }
+  "version": "2.0.0",
+  "scripts": {
+    "setup": "mysql -u root < schema.sql && node seed.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "mongodb": "^6.10.0",
+    "mysql2": "^3.11.0"
+  }
 }

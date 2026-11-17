@@ -1,78 +1,88 @@
 # Satellite Communication Management System (SCMS)
 
-A small web app that manages satellites, ground stations and clients, and lets clients book a satellite pass through a ground station for a time slot. The database refuses double bookings.
+A web app with three roles: **Organisations** register satellites and ground/launch stations, **Clients** request time on a satellite, and the **Admin** approves or rejects every request. The data is split between **MySQL (SQL)** and **MongoDB (NoSQL)**.
 
 ## Run
 ```
 npm install
-mysql -u root < schema.sql      # builds and seeds the database (re-run to reset)
-npm start                       # open http://localhost:3000
+npm run setup      # builds MySQL tables (schema.sql) and loads sample data into both databases (seed.js)
+npm start          # open http://localhost:3000
 ```
-If MySQL has a password, set it in `server.js` (`password: ''`) and use `mysql -u root -p < schema.sql`.
-
-## Stack
-MySQL (database) + Node.js with Express (API) + plain HTML/JavaScript (page).
-
-## How it works
+Needs MySQL and MongoDB running locally. On a Mac:
 ```
-Browser (public/index.html)  --fetch-->  Express API (server.js)  --SQL-->  MySQL (schema.sql)
+brew services start mysql
+docker start scms-mongo        # MongoDB runs in Docker (first time: docker run -d --name scms-mongo -p 27017:27017 mongo:7)
 ```
-1. The page calls `/api/...` with `fetch`.
-2. `server.js` turns each call into one SQL statement, using `?` placeholders so user input can never change the SQL (prevents SQL injection).
-3. MySQL runs it. If a rule is broken (trigger, foreign key, unique, check), MySQL returns an error message, and the page shows it in red.
+If MySQL has a password, put it in `db.js` (`password: ''`) and run `mysql -u root -p < schema.sql && node seed.js`.
 
-## Database
-| Table | Purpose | Key columns |
+## Demo accounts
+| Role | Email | Password |
 |---|---|---|
-| `satellites` | the satellites | PK `sat_id`; `name` UNIQUE; ENUM orbit (LEO/MEO/GEO), band, status |
-| `ground_stations` | antennas on Earth | PK `station_id`; `name` UNIQUE |
-| `clients` | who books | PK `client_id`; `email` UNIQUE |
-| `bookings` | one pass: satellite + station + client + time range | PK `booking_id`; 3 FKs; CHECK `end_time > start_time` |
+| Admin | admin@scms.in | admin123 |
+| Organisation | isro@scms.in | org123 |
+| Organisation | spacetech@scms.in | org123 |
+| Client | client@scms.in | client123 |
+| Client | agrisense@scms.in | client123 |
 
-Relationships: one satellite, station or client has many bookings (1:N each). `bookings` is the table that links the other three.
-Normalization: every table has a single primary key and no repeated groups or derived data (3NF/BCNF). A booking stores ids, never names.
+## Stack and flow
+```
+Browser (public/*.html)  --fetch + token-->  Express API (server.js)  --> MySQL   (structured, relational data)
+                                                                      --> MongoDB (flexible documents)
+```
+Pages: `index.html` (pick a role, Admin login on top) → `login.html?role=...` → `client.html` / `org.html` / `admin.html`.
 
-## What goes beyond CRUD
+## What is stored where (50 / 50)
+| MySQL (SQL) | MongoDB (NoSQL) |
+|---|---|
+| `users`: id, name, email, password hash, role | `profiles`: extra fields, different per role (org: registration no, website… / client: company, industry…) |
+| `satellites`: name, orbit, band, owner, status | `details`: technical details of satellites **and** stations in one collection (two document shapes), satellite availability `{days: [...], from, to}` |
+| `ground_stations`: name, location, owner, status | `requests`: approval workflow; each document has a `history` array updated with `$push` |
+| `bookings`: satellite + station + client + time | `sessions`: login tokens, deleted automatically after 8 h by a **TTL index** |
+| Trigger, views, report query | `activity`: log of every action; admin overview uses an **aggregation pipeline** |
+
+**Why this split:** things that must be consistent and related (who owns what, who booked what, no double bookings) need keys, foreign keys and a trigger, so they are in MySQL. Things whose shape changes or that grow like logs (profiles with different fields, technical details, request history, sessions) fit documents better, so they are in MongoDB. The two are linked by id: `profiles.user_id = users.user_id`, `details.ref_id = satellites.sat_id`.
+
+## Workflows
+1. **Organisation registers a satellite/station** → row in MySQL with `status = 'pending'`, details in MongoDB `details`, a request document in `requests`.
+2. **Admin approves** → MySQL `UPDATE ... SET status = 'approved'`, MongoDB `$set` status + `$push` to history. The satellite now appears in the client catalogue.
+3. **Client requests access** → server checks the satellite's available days/hours (from MongoDB), then saves an `access` request.
+4. **Admin approves access** → `INSERT INTO bookings`. The **trigger** rejects it if the slot overlaps; the request stays pending and the admin sees the error.
+
+## Login
+- Passwords are hashed with Node's built-in `crypto.scrypt` (salt + hash), never stored as plain text.
+- Login creates a random token stored in MongoDB `sessions`; the page sends it as `Authorization: Bearer <token>`.
+- `auth('admin')` style middleware in `server.js` checks the token and the role on every API call.
+- A client account cannot log in through the organisation portal and vice versa. Admin accounts cannot be registered from the site.
+
+## SQL features
 | Feature | Where | What it does |
 |---|---|---|
-| Trigger `trg_no_overlap` | `schema.sql` | Before an INSERT into `bookings`, rejects it if that station or that satellite already has a booking overlapping the time range. Overlap test: `new.start < old.end AND new.end > old.start` |
-| View `v_booking_details` | `schema.sql` | Joins 4 tables so the page shows names and minutes instead of ids |
-| Report query | `server.js` `/api/report` | LEFT JOIN + GROUP BY + COUNT/SUM: bookings and hours per satellite (satellites with no bookings still show 0) |
-| Constraints | `schema.sql` | PK, FK, UNIQUE, NOT NULL, ENUM, CHECK |
+| PK, FK, UNIQUE, ENUM, CHECK | `schema.sql` | integrity rules; `CHECK (end_time > start_time)` |
+| Trigger `trg_no_overlap` | `schema.sql` | before a booking is inserted: satellite and station must be approved, and no overlapping booking on either. Overlap test: `new.start < old.end AND new.end > old.start` |
+| Views `v_booking_details`, `v_satellites` | `schema.sql` | joins so pages show names instead of ids |
+| Report | `/api/admin/report` | LEFT JOIN + GROUP BY + COUNT/SUM: bookings and hours per satellite |
+| Foreign key on delete | admin delete | deleting a satellite/station that has bookings is refused |
 
-## Demo order (3 minutes)
-1. Satellites tab: add one, delete one. Delete INSAT-4A to show the foreign-key error (it has bookings).
-2. Bookings tab: add Hassan Station, 2026-12-01 09:30 to 09:45. The trigger error appears.
-3. Same booking on another day: it works.
-4. Report tab: hours per satellite have changed.
-
-## Explaining to the teacher
-Say, in this order:
-1. **Problem:** satellite and ground-station time is scarce. Two clients must never get the same antenna or satellite at the same time.
-2. **Solution:** a database that stores satellites, stations, clients and bookings, and enforces that rule itself.
-3. **Schema:** show the 4 tables and the ER relationships. Mention PK, FK, UNIQUE, CHECK and why `bookings` is the linking table.
-4. **Trigger:** the main idea. The rule lives in the database, not in the app, so no program can bypass it. Show the overlap condition.
-5. **View and report:** a view hides the joins. The report shows aggregation with GROUP BY.
-6. **App flow:** browser, then API, then SQL. Parameterised queries prevent SQL injection.
-7. **Demo**, then the conclusion: data integrity is enforced by the database.
-
-## Likely questions
-- **Why a trigger and not an `if` in the app?** The database protects the rule for every client, and the check and insert are atomic. Two users cannot sneak in between check and insert.
-- **Why LEFT JOIN in the report?** So satellites with zero bookings still appear.
-- **Why is the status an ENUM?** The database accepts only listed values.
-- **What does `ON DELETE` do here?** Nothing is set, so the default RESTRICT applies. A satellite with bookings cannot be deleted.
-- **What is the overlap condition?** Two ranges overlap when each starts before the other ends.
-- **Which normal form?** 3NF/BCNF. Every non-key column depends only on the key.
-
-## Changing code on the spot
-| Request | What to edit |
+## NoSQL features
+| Feature | Where |
 |---|---|
-| Add a column to satellites (e.g. `launch_year`) | `schema.sql` CREATE TABLE and INSERTs; `server.js` cols list in `crud('satellites', ...)`; `public/index.html` `pages.satellites` cols and form |
-| Add a new band (e.g. `UHF`) | the two ENUM lists in `schema.sql`, plus the list in `pages.satellites.form` |
-| Block bookings longer than 2 hours | in the trigger: `IF TIMESTAMPDIFF(MINUTE, NEW.start_time, NEW.end_time) > 120 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Max 2 hours'; END IF;` |
-| Only active satellites in the report | `server.js` report query: add `WHERE s.status = 'active'` before GROUP BY |
-| Bookings of one client | `server.js`: `SELECT * FROM v_booking_details WHERE client = ?` |
-| Search satellite by name | `server.js`: `SELECT * FROM satellites WHERE name LIKE ?` with `'%' + q + '%'` |
-| Add an edit | `server.js`: `app.put('/api/satellites/:id', ...)` with `UPDATE satellites SET status = ? WHERE sat_id = ?` |
+| Flexible schema (different fields per document) | `profiles`, `details` |
+| Embedded array + `$push` | `requests.history` |
+| TTL index (auto-expiry) | `sessions` (db.js) |
+| Unique and compound indexes | `db.js` `connectMongo()` |
+| Aggregation pipeline `$group / $project / $sort` | `/api/admin/overview` |
 
-After editing `schema.sql`, re-run the `mysql` line. After editing `server.js`, restart `npm start`. `public/index.html` only needs a browser refresh.
+## Demo script
+1. Home → **Login as Organisation** → `spacetech@scms.in`. Show *My requests* (Pixel-1 pending). Register a new satellite.
+2. Top **Admin login** → *Requests*: approve the new satellite and Pixel-1.
+3. Home → **Login as Client** → *Available satellites* shows days, hours and booked slots. Request access on an allowed day/time. (A wrong day is refused.)
+4. Admin → approve it → appears in *Bookings*.
+5. **Trigger:** approve the seeded SkyLink request for INSAT-4A (1 Dec 09:30–10:30) → error "Ground station is already booked in this time range".
+6. **Foreign key:** Admin → *Satellites* → delete INSAT-4A → refused because it has bookings.
+7. *Overview* (SQL counts + Mongo aggregation), *Report*, *Activity log*.
+
+Useful shell checks:
+```
+mysql -u root scms -e "SELECT * FROM v_booking_details;"
+mongosh scms --eval "db.requests.find({status:'pending'})"
+```

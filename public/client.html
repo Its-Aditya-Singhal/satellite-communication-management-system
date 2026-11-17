@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Client · SCMS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">📡</div>
+    <div><h1>Client portal</h1><p>Satellite Communication Management System</p></div>
+    <div class="right"><span class="chip" id="who"></span><button class="ghost" onclick="logout()">Logout</button></div>
+  </header>
+  <nav id="nav"></nav>
+  <main>
+    <div class="title"><div><h2 id="title"></h2><p id="sub"></p></div></div>
+    <div id="page"></div>
+  </main>
+  <div id="toast"></div>
+
+  <script src="app.js"></script>
+  <script>
+    guard('client');
+    let catalog = { satellites: [], stations: [] };
+    let chosenSat = '';
+
+    tabs({
+      catalog: {
+        title: 'Available satellites',
+        sub: 'Approved satellites with the days and hours they can be used, and slots already booked',
+        render: async () => {
+          catalog = await api('GET', '/api/catalog');
+          if (!catalog.satellites.length) return '<div class="card"><div class="empty">No approved satellites yet</div></div>';
+          return '<div class="grid">' + catalog.satellites.map((s) => {
+            const d = s.details, a = d.availability || {};
+            const booked = s.booked.length
+              ? s.booked.map((b) => `<div>${fmt(b.start_time)} → ${b.end_time.slice(11, 16)}</div>`).join('')
+              : '<span class="muted">No upcoming bookings</span>';
+            return `<div class="card">
+              <h3>${esc(s.name)} &nbsp;${badge(s.orbit_type)} ${badge(s.frequency_band + ' band', 'band')}</h3>
+              <div class="pad">
+                <div class="kv">
+                  <b>Owner</b><span>${esc(s.organisation)}</span>
+                  <b>Purpose</b><span>${esc(d.purpose)}</span>
+                  <b>Available hours</b><span>${a.from} – ${a.to}</span>
+                  <b>Available days</b><span>${days(a.days)}</span>
+                  <b>Already booked</b><span>${booked}</span>
+                </div>
+                <p><button class="primary" onclick="chosenSat=${s.sat_id}; show('request')">Request access</button></p>
+              </div></div>`;
+          }).join('') + '</div>';
+        },
+      },
+
+      request: {
+        title: 'Request access',
+        sub: 'The request goes to the admin. You get a booking once it is approved.',
+        render: async () => {
+          if (!catalog.satellites.length) catalog = await api('GET', '/api/catalog');
+          const sats = catalog.satellites.map((s) => `<option value="${s.sat_id}" ${s.sat_id == chosenSat ? 'selected' : ''}>${esc(s.name)} (${s.orbit_type}, ${s.frequency_band})</option>`).join('');
+          const sts = catalog.stations.map((s) => `<option value="${s.station_id}">${esc(s.name)}, ${esc(s.location)}</option>`).join('');
+          return `<div class="card"><h3>New access request</h3>
+            <form class="f" id="reqForm">
+              <label>Satellite <select name="sat_id" onchange="showAvail()">${sats}</select></label>
+              <label>Ground station <select name="station_id">${sts}</select></label>
+              <label>Start <input type="datetime-local" name="start_time" required></label>
+              <label>End <input type="datetime-local" name="end_time" required></label>
+              <label>Data type <select name="data_type"><option>Video</option><option>Voice</option><option>Data</option><option>Imagery</option><option>Telemetry</option></select></label>
+              <label class="wide">Purpose <input name="purpose" placeholder="e.g. Live broadcast uplink" required></label>
+              <div class="wide muted" id="avail"></div>
+              <div><button class="primary">Send request</button></div>
+            </form></div>`;
+        },
+        after: () => {
+          showAvail();
+          document.getElementById('reqForm').onsubmit = async (e) => {
+            e.preventDefault();
+            try {
+              await api('POST', '/api/client/requests', formData(e.target));
+              toast('Request sent to the admin', true);
+              show('requests');
+            } catch (err) { toast(err.message, false); }
+          };
+        },
+      },
+
+      requests: {
+        title: 'My requests',
+        sub: 'Each request is a MongoDB document with its full status history',
+        render: async () => {
+          const list = await api('GET', '/api/my/requests');
+          return list.length ? list.map((r) => requestCard(r)).join('') : '<div class="card"><div class="empty">No requests yet</div></div>';
+        },
+      },
+
+      bookings: {
+        title: 'My bookings',
+        sub: 'Approved slots (MySQL view v_booking_details)',
+        render: async () => table(await api('GET', '/api/my/bookings'), [
+          ['booking_id', '#'], ['satellite', 'Satellite'], ['station', 'Station'],
+          ['start_time', 'Start', fmt], ['end_time', 'End', fmt], ['minutes', 'Minutes'],
+        ], 'No bookings yet. Request access to a satellite first.'),
+      },
+    });
+
+    // show the chosen satellite's availability under the form
+    function showAvail() {
+      const id = document.querySelector('[name=sat_id]').value;
+      const s = catalog.satellites.find((x) => x.sat_id == id);
+      const a = (s && s.details.availability) || {};
+      document.getElementById('avail').innerHTML = s ? `Available ${a.from} – ${a.to} on ${days(a.days)}` : '';
+    }
+  </script>
+</body>
+</html>

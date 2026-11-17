@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin · SCMS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">🔐</div>
+    <div><h1>Admin panel</h1><p>Satellite Communication Management System</p></div>
+    <div class="right"><span class="chip" id="who"></span><button class="ghost" onclick="logout()">Logout</button></div>
+  </header>
+  <nav id="nav"></nav>
+  <main>
+    <div class="title"><div><h2 id="title"></h2><p id="sub"></p></div><div id="tools"></div></div>
+    <div id="page"></div>
+  </main>
+  <div id="toast"></div>
+
+  <script src="app.js"></script>
+  <script>
+    guard('admin');
+    let filter = 'pending';
+    const del = (what, id) => `<button class="danger" onclick="remove('${what}', ${id})">Delete</button>`;
+
+    tabs({
+      requests: {
+        title: 'Requests',
+        sub: 'From organisations (satellites, stations) and clients (access). Stored in MongoDB.',
+        render: async () => {
+          document.getElementById('tools').innerHTML = '<div class="filters">' + ['pending', 'approved', 'rejected', '']
+            .map((s) => `<button class="${s === filter ? 'on' : ''}" onclick="filter='${s}'; show('requests')">${s || 'all'}</button>`).join('') + '</div>';
+          const list = await api('GET', '/api/admin/requests?status=' + filter);
+          if (!list.length) return '<div class="card"><div class="empty">No requests here</div></div>';
+          return list.map((r) => requestCard(r, r.status !== 'pending' ? '' : `<div class="decide">
+              <input id="note-${r._id}" placeholder="Note for the requester (optional)">
+              <button class="ok" onclick="decide('${r._id}', 'approve')">Approve</button>
+              <button class="no" onclick="decide('${r._id}', 'reject')">Reject</button></div>`)).join('');
+        },
+      },
+
+      overview: {
+        title: 'Overview',
+        sub: 'Counts from MySQL (COUNT) and request totals from a MongoDB aggregation pipeline',
+        render: async () => {
+          const { counts, requests } = await api('GET', '/api/admin/overview');
+          const stats = Object.entries(counts).map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+          return `<div class="stats">${stats}</div><div class="card"><h3>Requests by type and status (MongoDB $group)</h3></div>` +
+            table(requests, [['type', 'Type', (v) => badge(v)], ['status', 'Status', (v) => badge(v)], ['count', 'Count']]);
+        },
+      },
+
+      satellites: {
+        title: 'Satellites',
+        sub: 'All satellites (MySQL view v_satellites)',
+        render: async () => table(await api('GET', '/api/admin/satellites'), [
+          ['sat_id', '#'], ['name', 'Name'], ['organisation', 'Organisation'], ['orbit_type', 'Orbit', (v) => badge(v)],
+          ['frequency_band', 'Band'], ['status', 'Status', (v) => badge(v)], ['sat_id', '', (v) => del('satellites', v)],
+        ]),
+      },
+
+      stations: {
+        title: 'Stations',
+        sub: 'All ground / launch stations',
+        render: async () => table(await api('GET', '/api/admin/stations'), [
+          ['station_id', '#'], ['name', 'Name'], ['location', 'Location'], ['organisation', 'Organisation'],
+          ['status', 'Status', (v) => badge(v)], ['station_id', '', (v) => del('stations', v)],
+        ]),
+      },
+
+      bookings: {
+        title: 'Bookings',
+        sub: 'Approved access slots (MySQL view v_booking_details)',
+        render: async () => table(await api('GET', '/api/admin/bookings'), [
+          ['booking_id', '#'], ['satellite', 'Satellite'], ['station', 'Station'], ['client', 'Client'],
+          ['start_time', 'Start', fmt], ['end_time', 'End', fmt], ['minutes', 'Min'], ['booking_id', '', (v) => del('bookings', v)],
+        ]),
+      },
+
+      users: {
+        title: 'Users',
+        sub: 'Accounts in MySQL (passwords are stored hashed)',
+        render: async () => table(await api('GET', '/api/admin/users'), [
+          ['user_id', '#'], ['name', 'Name'], ['email', 'Email'], ['role', 'Role', (v) => badge(v)], ['created_at', 'Joined', fmt],
+        ]),
+      },
+
+      report: {
+        title: 'Usage report',
+        sub: 'LEFT JOIN + GROUP BY + COUNT / SUM in MySQL',
+        render: async () => {
+          const rows = await api('GET', '/api/admin/report');
+          const max = Math.max(1, ...rows.map((r) => Number(r.total_hours)));
+          return table(rows, [['satellite', 'Satellite'], ['total_bookings', 'Bookings'], ['total_hours', 'Hours'],
+            ['total_hours', '', (v) => `<div class="bar"><span style="width:${(v / max) * 100}%"></span></div>`]]);
+        },
+      },
+
+      activity: {
+        title: 'Activity log',
+        sub: 'Last 50 actions (MongoDB activity collection)',
+        render: async () => table(await api('GET', '/api/admin/activity'), [
+          ['at', 'When', fmt], ['name', 'User'], ['role', 'Role', (v) => badge(v)], ['action', 'Action'],
+        ]),
+      },
+    });
+
+    // clear the filter buttons when leaving the Requests tab
+    const _show = show;
+    show = async (k) => { document.getElementById('tools').innerHTML = ''; await _show(k); };
+
+    async function decide(id, decision) {
+      try {
+        await api('POST', `/api/admin/requests/${id}/${decision}`, { note: document.getElementById('note-' + id).value });
+        toast(decision === 'approve' ? 'Approved' : 'Rejected', true);
+        show('requests');
+      } catch (err) { toast(err.message, false); }   // e.g. the overlap TRIGGER error
+    }
+
+    async function remove(what, id) {
+      if (!confirm(`Delete ${what.slice(0, -1)} #${id}?`)) return;
+      try {
+        await api('DELETE', `/api/admin/${what}/${id}`);
+        toast('Deleted', true);
+        show(what);
+      } catch (err) { toast(err.message, false); }   // e.g. the FOREIGN KEY error
+    }
+  </script>
+</body>
+</html>

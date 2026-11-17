@@ -1,245 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SCMS</title>
-<style>
-  :root {
-    --navy: #0b1530;
-    --blue: #2563eb;
-    --blue-soft: #eff4ff;
-    --bg: #f4f6fb;
-    --card: #ffffff;
-    --text: #1e293b;
-    --muted: #64748b;
-    --line: #e2e8f0;
-    --green: #15803d;  --green-bg: #dcfce7;
-    --red: #b91c1c;    --red-bg: #fee2e2;
-    --grey: #475569;   --grey-bg: #e2e8f0;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    font-size: 14px;
-  }
-
-  /* top bar */
-  header {
-    background: linear-gradient(120deg, var(--navy), #1e3a8a);
-    color: #fff; padding: 18px 32px;
-    display: flex; align-items: center; gap: 14px;
-  }
-  .logo {
-    width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,.14);
-    display: grid; place-items: center; font-size: 22px;
-  }
-  header h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: .2px; }
-  header p  { margin: 2px 0 0; font-size: 12px; color: #b6c4f2; }
-
-  /* tabs */
-  nav { background: var(--card); border-bottom: 1px solid var(--line); padding: 0 32px; display: flex; gap: 4px; overflow-x: auto; }
-  nav button {
-    background: none; border: none; cursor: pointer; padding: 14px 16px; font-size: 14px;
-    color: var(--muted); font-weight: 550; border-bottom: 3px solid transparent; white-space: nowrap;
-  }
-  nav button:hover { color: var(--text); }
-  nav button.on { color: var(--blue); border-bottom-color: var(--blue); }
-
-  main { max-width: 1100px; margin: 28px auto; padding: 0 24px; }
-  .title { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; }
-  .title h2 { margin: 0; font-size: 22px; }
-  .title p  { margin: 4px 0 0; color: var(--muted); }
-  .count { background: var(--blue-soft); color: var(--blue); padding: 4px 12px; border-radius: 20px; font-weight: 600; font-size: 13px; }
-
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgba(15,23,42,.04); margin-bottom: 20px; overflow: hidden; }
-  .card h3 { margin: 0; padding: 14px 20px; font-size: 14px; border-bottom: 1px solid var(--line); background: #fafbfd; }
-
-  /* table */
-  table { border-collapse: collapse; width: 100%; }
-  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); padding: 12px 20px; background: #fafbfd; border-bottom: 1px solid var(--line); }
-  td { padding: 13px 20px; border-bottom: 1px solid var(--line); }
-  tr:last-child td { border-bottom: none; }
-  tbody tr:hover { background: #f8faff; }
-  td.id { color: var(--muted); width: 60px; }
-  td.act { text-align: right; width: 90px; }
-  .empty { padding: 36px; text-align: center; color: var(--muted); }
-
-  /* badges */
-  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-  .b-active, .b-LEO { background: var(--green-bg); color: var(--green); }
-  .b-inactive       { background: var(--grey-bg);  color: var(--grey); }
-  .b-GEO            { background: #e0e7ff; color: #3730a3; }
-  .b-MEO            { background: #fef3c7; color: #92400e; }
-  .b-band           { background: var(--blue-soft); color: var(--blue); }
-
-  /* report bars */
-  .bar { background: var(--line); border-radius: 6px; height: 10px; min-width: 160px; }
-  .bar span { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #3b82f6, #1d4ed8); }
-
-  /* form */
-  form { display: flex; flex-wrap: wrap; gap: 14px; padding: 18px 20px; align-items: flex-end; }
-  label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: capitalize; }
-  input, select {
-    padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; background: #fff; color: var(--text); min-width: 160px;
-  }
-  input:focus, select:focus { outline: 2px solid #bfd3ff; border-color: var(--blue); }
-  button.primary { background: var(--blue); color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-weight: 600; cursor: pointer; font-size: 14px; }
-  button.primary:hover { background: #1d4ed8; }
-  button.danger { background: none; border: 1px solid #fecaca; color: var(--red); border-radius: 6px; padding: 5px 11px; cursor: pointer; font-size: 12px; font-weight: 600; }
-  button.danger:hover { background: var(--red-bg); }
-
-  /* popup message */
-  #toast {
-    position: fixed; right: 24px; bottom: 24px; max-width: 380px; padding: 14px 18px; border-radius: 10px;
-    font-weight: 550; box-shadow: 0 8px 24px rgba(15,23,42,.18); display: none; line-height: 1.4;
-  }
-  #toast.ok  { display: block; background: var(--green-bg); color: var(--green); border: 1px solid #86efac; }
-  #toast.err { display: block; background: var(--red-bg);   color: var(--red);   border: 1px solid #fca5a5; }
-
-  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 10px 0 30px; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Satellite Communication Management System</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <header>
+    <div class="logo">🛰</div>
+    <div><h1>Satellite Communication Management System</h1><p>MySQL + MongoDB · DBMS Mini Project</p></div>
+    <div class="right"><a class="ghost" href="login.html?role=admin">🔐 Admin login</a></div>
+  </header>
 
-<header>
-  <div class="logo">🛰️</div>
-  <div>
-    <h1>Satellite Communication Management System</h1>
-    <p>Satellites &middot; Ground stations &middot; Clients &middot; Conflict-free bookings</p>
+  <div class="hero">
+    <h2>Book satellite time, the organised way</h2>
+    <p>Organisations register satellites and ground stations. Clients request access. The admin approves.</p>
   </div>
-</header>
 
-<nav id="nav"></nav>
-
-<main>
-  <div class="title">
-    <div><h2 id="title"></h2><p id="sub"></p></div>
-    <span class="count" id="count"></span>
+  <div class="roles">
+    <a class="role" href="login.html?role=client">
+      <div class="ic">📡</div>
+      <h3>Login as Client</h3>
+      <p>See available satellites with their days and times, and request access to one.</p>
+      <span class="go">Continue as client →</span>
+    </a>
+    <a class="role" href="login.html?role=organisation">
+      <div class="ic">🏢</div>
+      <h3>Login as Organisation</h3>
+      <p>Register your satellites and launch / ground stations and send them for approval.</p>
+      <span class="go">Continue as organisation →</span>
+    </a>
   </div>
-  <div id="page"></div>
-</main>
 
-<div id="toast"></div>
-<footer>SCMS &middot; MySQL + Node.js + Express</footer>
-
-<script>
-// Each page: its title, the columns to show, and the form fields to add a row
-const pages = {
-  satellites: { title: 'Satellites', sub: 'Registered satellites and their orbit and frequency band',
-    cols: ['sat_id', 'name', 'orbit_type', 'frequency_band', 'status'], id: 'sat_id',
-    form: [['name', 'text'], ['orbit_type', ['LEO', 'MEO', 'GEO']],
-           ['frequency_band', ['L', 'S', 'C', 'X', 'Ku', 'Ka']], ['status', ['active', 'inactive']]] },
-  stations:   { title: 'Ground Stations', sub: 'Antenna sites that talk to the satellites',
-    cols: ['station_id', 'name', 'location'], id: 'station_id',
-    form: [['name', 'text'], ['location', 'text']] },
-  clients:    { title: 'Clients', sub: 'Organisations that book satellite time',
-    cols: ['client_id', 'name', 'email'], id: 'client_id',
-    form: [['name', 'text'], ['email', 'text']] },
-  bookings:   { title: 'Bookings', sub: 'A satellite pass through a ground station. Overlaps are rejected by the database.',
-    cols: ['booking_id', 'satellite', 'station', 'client', 'start_time', 'end_time', 'minutes'], id: 'booking_id',
-    form: [['sat_id', 'satellites'], ['station_id', 'stations'], ['client_id', 'clients'],
-           ['start_time', 'datetime-local'], ['end_time', 'datetime-local']] },
-  report:     { title: 'Usage Report', sub: 'Bookings and hours per satellite',
-    cols: ['satellite', 'total_bookings', 'total_hours'] },
-};
-
-// ---------- small helpers ----------
-const label = (s) => ({ sat_id: 'satellite', station_id: 'station', client_id: 'client' }[s]) || s.replace(/_/g, ' ');
-
-function cell(col, val, row, rows) {
-  if (col === 'status')            return `<span class="badge b-${val}">${val}</span>`;
-  if (col === 'orbit_type')        return `<span class="badge b-${val}">${val}</span>`;
-  if (col === 'frequency_band')    return `<span class="badge b-band">${val}-band</span>`;
-  if (col === 'start_time' || col === 'end_time') return new Date(val.replace(' ', 'T')).toLocaleString('en-GB',
-    { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  if (col === 'minutes')           return val + ' min';
-  if (col === 'total_hours') {
-    const max = Math.max(...rows.map((r) => Number(r.total_hours)), 1);
-    return `<div style="display:flex;align-items:center;gap:12px"><div class="bar"><span style="width:${Number(val) / max * 100}%"></span></div>${val} h</div>`;
-  }
-  return val;
-}
-
-let timer;
-function toast(text, ok) {
-  const t = document.getElementById('toast');
-  t.className = ok ? 'ok' : 'err';
-  t.textContent = text;
-  clearTimeout(timer);
-  timer = setTimeout(() => (t.className = ''), 4500);
-}
-
-async function call(method, url, body) {
-  const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' },
-                               body: body ? JSON.stringify(body) : undefined });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error);
-  return data;
-}
-
-// ---------- draw a page ----------
-async function load(name) {
-  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.id === 'b-' + name));
-  const p = pages[name];
-  const rows = await call('GET', '/api/' + name);
-  document.getElementById('title').textContent = p.title;
-  document.getElementById('sub').textContent = p.sub;
-  document.getElementById('count').textContent = rows.length + (rows.length === 1 ? ' record' : ' records');
-
-  // table
-  let html = '<div class="card"><table><thead><tr>' +
-    p.cols.map((c) => `<th>${c === p.id ? '#' : label(c)}</th>`).join('') + (p.id ? '<th></th>' : '') + '</tr></thead><tbody>';
-  for (const row of rows) {
-    html += '<tr>' + p.cols.map((c) => `<td${c === p.id ? ' class="id"' : ''}>${cell(c, row[c], row, rows)}</td>`).join('');
-    if (p.id) html += `<td class="act"><button class="danger" onclick="del('${name}', ${row[p.id]})">Delete</button></td>`;
-    html += '</tr>';
-  }
-  html += '</tbody></table>' + (rows.length ? '' : '<div class="empty">Nothing here yet</div>') + '</div>';
-
-  // add form
-  if (p.form) {
-    html += '<div class="card"><h3>Add new</h3><form id="f">';
-    for (const [field, type] of p.form) {
-      html += `<label>${label(field)}`;
-      if (Array.isArray(type)) {                       // fixed list of choices
-        html += `<select name="${field}">` + type.map((o) => `<option>${o}</option>`).join('') + '</select>';
-      } else if (['satellites', 'stations', 'clients'].includes(type)) {   // pick from another table
-        const list = await call('GET', '/api/' + type);
-        html += `<select name="${field}">` +
-          list.map((x) => `<option value="${x[Object.keys(x)[0]]}">${x.name}</option>`).join('') + '</select>';
-      } else {
-        html += `<input name="${field}" type="${type}" required>`;
-      }
-      html += '</label>';
-    }
-    html += '<button class="primary">Add</button></form></div>';
-  }
-  document.getElementById('page').innerHTML = html;
-
-  const f = document.getElementById('f');
-  if (f) f.onsubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await call('POST', '/api/' + name, Object.fromEntries(new FormData(f)));
-      await load(name);
-      toast('Saved', true);
-    } catch (err) { toast(err.message, false); }
-  };
-}
-
-async function del(name, id) {
-  if (!confirm('Delete this record?')) return;
-  try { await call('DELETE', `/api/${name}/${id}`); await load(name); toast('Deleted', true); }
-  catch (err) { toast(err.message, false); }
-}
-
-const nav = document.getElementById('nav');
-for (const name of Object.keys(pages)) {
-  nav.innerHTML += `<button id="b-${name}" onclick="load('${name}')">${pages[name].title}</button>`;
-}
-load('satellites');
-</script>
+  <div class="steps">
+    <div><b>1. Organisation registers</b>Satellite or station is saved as <i>pending</i> and a request goes to the admin.</div>
+    <div><b>2. Admin approves</b>It becomes visible to clients in the catalogue.</div>
+    <div><b>3. Client requests access</b>Picks a satellite, station and time slot.</div>
+    <div><b>4. Admin approves</b>A booking is created. The MySQL trigger blocks clashes.</div>
+  </div>
+  <footer>Core data in MySQL · Profiles, details, requests, sessions and logs in MongoDB</footer>
 </body>
 </html>
